@@ -1,10 +1,26 @@
+# Python cache
 __pycache__/
-*.pkl
-*.db
-*.tmp
-.DS_Store
-.env
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
 venv/
 agent_env/
-faiss_store/
+
+# Streamlit cache / temp
 .streamlit/
+*.tmp
+
+# FAISS index files
+faiss_store/
+
+# Database file
+agent_chatbot.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
