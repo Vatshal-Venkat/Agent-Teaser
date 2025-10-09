@@ -1,3 +1,7 @@
+# =========================
+# agent.py (Refined for GEMINI AI source handling)
+# =========================
+
 import os
 import tempfile
 import datetime
@@ -83,7 +87,6 @@ def get_recent_chats(limit=50):
     c.execute("SELECT id, role, content, time FROM chats ORDER BY id DESC LIMIT ?", (limit,))
     rows = c.fetchall()
     conn.close()
-    # return reversed so older first in the list
     return rows[::-1]
 
 def get_all_chats_df(limit=None):
@@ -104,21 +107,17 @@ init_db()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-# Gemini configuration (expects gemini API key in st.secrets["GEMINI_API_KEY"])
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception as e:
-    # show error only inside streamlit app; printing also helps debugging
     try:
         st.error(f"Secret loading failed: {e}")
     except Exception:
         print("Secret loading failed:", e)
 
-# default model names in your original file kept
 chat_model = genai.GenerativeModel("models/gemini-2.5-pro")
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
 
-# Gemini wrapper for LangChain LLM usage (kept from your file)
 class GeminiLLM(LLM):
     chat_model: Optional[Any] = None
     def __init__(self, model_name="models/gemini-2.5-pro", **kwargs):
@@ -148,20 +147,17 @@ DISTILL_FAISS_PATH = "faiss_store/distill_index.pkl"
 os.makedirs("faiss_store", exist_ok=True)
 
 # =========================
-# File extraction & embedding helpers (preserved)
+# File extraction & embedding helpers
 # =========================
 def extract_text_from_pdfs(pdf_files):
     docs = []
     for pdf_file in pdf_files:
         fname = getattr(pdf_file, "name", None) or "uploaded.pdf"
-        try:
-            insert_document(fname, "PDF")
-        except Exception:
-            pass
+        try: insert_document(fname, "PDF")
+        except Exception: pass
         try:
             pdf_reader = PdfReader(pdf_file)
         except Exception as e:
-            # fallback to temporary write
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmpf:
                     tmpf.write(pdf_file.read())
@@ -179,17 +175,13 @@ def extract_text_from_pdfs(pdf_files):
 
 def extract_text_from_excel(excel_file):
     docs = []
-    try:
-        insert_document(excel_file.name, "Excel")
-    except Exception:
-        pass
+    try: insert_document(excel_file.name, "Excel")
+    except Exception: pass
     try:
         xls = pd.ExcelFile(excel_file)
         for sheet_name in xls.sheet_names:
-            try:
-                df = pd.read_excel(excel_file, sheet_name=sheet_name)
-            except Exception:
-                continue
+            try: df = pd.read_excel(excel_file, sheet_name=sheet_name)
+            except Exception: continue
             for i, row in df.iterrows():
                 row_text = " | ".join([f"{col}: {str(row[col])}" for col in df.columns if pd.notnull(row[col])])
                 if row_text.strip():
@@ -200,10 +192,8 @@ def extract_text_from_excel(excel_file):
 
 def extract_text_from_csv(csv_file):
     docs = []
-    try:
-        insert_document(getattr(csv_file, "name", "csv"), "CSV")
-    except Exception:
-        pass
+    try: insert_document(getattr(csv_file, "name", "csv"), "CSV")
+    except Exception: pass
     try:
         df = pd.read_csv(csv_file)
         for i, row in df.iterrows():
@@ -214,25 +204,20 @@ def extract_text_from_csv(csv_file):
         st.error(f"Error reading CSV file {getattr(csv_file,'name','csv')}: {e}")
     return docs
 
-def embed_text(texts):
-    return embedding_model.encode(texts, convert_to_numpy=True)
+def embed_text(texts): return embedding_model.encode(texts, convert_to_numpy=True)
 
-# CLIP setup
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
 clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 def embed_image(image_file):
-    try:
-        insert_document(getattr(image_file, "name", "image.png"), "Image")
-    except Exception:
-        pass
+    try: insert_document(getattr(image_file, "name", "image.png"), "Image")
+    except Exception: pass
     if hasattr(image_file, "read"):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(image_file.read())
             tmp.flush()
             path = tmp.name
-    else:
-        path = image_file
+    else: path = image_file
     try:
         image = Image.open(path).convert("RGB")
         inputs = clip_processor(images=image, return_tensors="pt").to(device)
@@ -243,170 +228,126 @@ def embed_image(image_file):
         st.error(f"Skipped invalid image file: {getattr(image_file,'name', path)}")
         return None, None
     finally:
-        if hasattr(image_file, "read") and os.path.exists(path):
-            os.remove(path)
+        if hasattr(image_file, "read") and os.path.exists(path): os.remove(path)
 
-# ImageRetriever class (preserved)
+# =========================
+# Image retriever
+# =========================
 class ImageRetriever:
     def __init__(self):
         self.paths = []
         self.embeddings = None
     def add_images(self, new_paths, new_embeddings):
-        valid_paths = []
-        valid_embs = []
+        valid_paths, valid_embs = [], []
         for p, e in zip(new_paths, new_embeddings):
             if p is not None and e is not None:
                 valid_paths.append(p)
                 valid_embs.append(e)
-        if not valid_paths or not valid_embs:
-            return
+        if not valid_paths or not valid_embs: return
         self.paths.extend(valid_paths)
         arr = np.array(valid_embs).astype("float32")
         if self.embeddings is None:
-            dim = arr.shape[1] if arr.ndim == 2 else arr.shape[0]
+            dim = arr.shape[1] if arr.ndim==2 else arr.shape[0]
             self.embeddings = faiss.IndexFlatL2(dim)
-        if arr.ndim == 1:
-            arr = arr.reshape(1, -1)
+        if arr.ndim==1: arr=arr.reshape(1,-1)
         self.embeddings.add(arr)
-        with open(IMAGE_FAISS_PATH + ".tmp", "wb") as f:
-            pickle.dump({"paths": self.paths, "embeddings": self.embeddings}, f)
-        os.replace(IMAGE_FAISS_PATH + ".tmp", IMAGE_FAISS_PATH)
+        with open(IMAGE_FAISS_PATH+".tmp","wb") as f: pickle.dump({"paths":self.paths,"embeddings":self.embeddings},f)
+        os.replace(IMAGE_FAISS_PATH+".tmp", IMAGE_FAISS_PATH)
     def get_relevant_images(self, query_text, top_k=5):
-        if not self.paths or self.embeddings is None or getattr(self.embeddings, "ntotal", 0) == 0:
-            return []
+        if not self.paths or self.embeddings is None or getattr(self.embeddings,"ntotal",0)==0: return []
         inputs = clip_processor(text=query_text, return_tensors="pt", padding=True).to(device)
         with torch.no_grad():
             query_emb = clip_model.get_text_features(**inputs).cpu().numpy()
-        if query_emb.ndim == 1:
-            query_emb = query_emb.reshape(1, -1)
-        if query_emb.shape[1] != self.embeddings.d:
-            print(f"Skipped image search: dimension mismatch {query_emb.shape[1]} vs {self.embeddings.d}")
-            return []
-        k = min(top_k, self.embeddings.ntotal)
-        if k <= 0:
-            return []
-        D, I = self.embeddings.search(query_emb.astype("float32"), k)
-        indices = I[0].tolist()
+        if query_emb.ndim==1: query_emb=query_emb.reshape(1,-1)
+        if query_emb.shape[1]!=self.embeddings.d: return []
+        k=min(top_k,self.embeddings.ntotal)
+        if k<=0: return []
+        D,I=self.embeddings.search(query_emb.astype("float32"),k)
+        indices=I[0].tolist()
         return [self.paths[i] for i in indices]
 
-image_retriever = ImageRetriever()
+image_retriever=ImageRetriever()
 if os.path.exists(IMAGE_FAISS_PATH):
     try:
-        with open(IMAGE_FAISS_PATH, "rb") as f:
-            data = pickle.load(f)
-            image_retriever.paths = data.get("paths", [])
-            image_retriever.embeddings = data.get("embeddings", None)
+        with open(IMAGE_FAISS_PATH,"rb") as f:
+            data=pickle.load(f)
+            image_retriever.paths=data.get("paths",[])
+            image_retriever.embeddings=data.get("embeddings",None)
     except Exception:
-        image_retriever = ImageRetriever()
+        image_retriever=ImageRetriever()
 
 # =========================
-# Text FAISS + BM25 + Distill memory (preserved)
+# Text FAISS + BM25 + Distill memory
 # =========================
-text_index = None
-text_docs = []
-bm25 = None
-distill_index = None
-distill_docs = []
-
+text_index,text_docs,bm25=None,[],None
+distill_index,distill_docs=None,[]
 if os.path.exists(TEXT_FAISS_PATH):
     try:
-        with open(TEXT_FAISS_PATH, "rb") as f:
-            data = pickle.load(f)
-            text_index = data.get("index")
-            text_docs = data.get("docs", [])
-            if text_docs:
-                bm25 = BM25Okapi([d.page_content.split() for d in text_docs])
-    except Exception:
-        text_index, text_docs, bm25 = None, [], None
-
+        with open(TEXT_FAISS_PATH,"rb") as f:
+            data=pickle.load(f)
+            text_index=data.get("index")
+            text_docs=data.get("docs",[])
+            if text_docs: bm25=BM25Okapi([d.page_content.split() for d in text_docs])
+    except Exception: text_index,text_docs,bm25=None,[],None
 if os.path.exists(DISTILL_FAISS_PATH):
     try:
-        with open(DISTILL_FAISS_PATH, "rb") as f:
-            data = pickle.load(f)
-            distill_index = data.get("index")
-            distill_docs = data.get("docs", [])
-    except Exception:
-        distill_index, distill_docs = None, []
+        with open(DISTILL_FAISS_PATH,"rb") as f:
+            data=pickle.load(f)
+            distill_index=data.get("index")
+            distill_docs=data.get("docs",[])
+    except Exception: distill_index,distill_docs=None,[]
 
-def save_text_faiss(index, docs, path=TEXT_FAISS_PATH):
-    tmp = path + ".tmp"
-    with open(tmp, "wb") as f:
-        pickle.dump({"index": index, "docs": docs}, f)
-    os.replace(tmp, path)
+def save_text_faiss(index,docs,path=TEXT_FAISS_PATH):
+    tmp=path+".tmp"
+    with open(tmp,"wb") as f: pickle.dump({"index":index,"docs":docs},f)
+    os.replace(tmp,path)
 
 # =========================
-# RAG agent (preserved) with same tools & retrieval
+# RAG agent
 # =========================
-def rag_chat_stream_agentic(query, use_images=True):
+def rag_chat_stream_agentic(query,use_images=True):
     def text_search_tool(query_text):
-        global text_index, text_docs, bm25
-        docs = []
-        sources = []
-        top_k = min(5, text_index.ntotal if text_index else 0)
-        if text_index and top_k > 0:
-            query_emb = embed_text([query_text]).astype("float32")
-            D, I = text_index.search(query_emb, top_k)
+        global text_index,text_docs,bm25
+        docs,sources=[],[]
+        top_k=min(5,text_index.ntotal if text_index else 0)
+        if text_index and top_k>0:
+            query_emb=embed_text([query_text]).astype("float32")
+            D,I=text_index.search(query_emb,top_k)
             docs.extend([text_docs[i] for i in I[0]])
             sources.extend(docs)
         if bm25:
-            tokenized_query = query_text.split()
-            bm25_scores = bm25.get_scores(tokenized_query)
-            top_bm25 = np.argsort(bm25_scores)[::-1][:top_k]
+            tokenized_query=query_text.split()
+            bm25_scores=bm25.get_scores(tokenized_query)
+            top_bm25=np.argsort(bm25_scores)[::-1][:top_k]
             docs.extend([text_docs[i] for i in top_bm25 if text_docs[i] not in docs])
-        return docs, sources
-
+        return docs,sources
     def image_search_tool(query_text):
-        images = image_retriever.get_relevant_images(query_text, top_k=3) if use_images else []
+        images=image_retriever.get_relevant_images(query_text,top_k=3) if use_images else []
         return images
-
     def distillation_search_tool(query_text):
-        global distill_index, distill_docs
-        docs = []
-        if distill_index and getattr(distill_index, "ntotal", 0) > 0:
-            query_emb = embed_text([query_text]).astype("float32")
-            top_k = min(3, distill_index.ntotal)
-            D, I = distill_index.search(query_emb, top_k)
+        global distill_index,distill_docs
+        docs=[]
+        if distill_index and getattr(distill_index,"ntotal",0)>0:
+            query_emb=embed_text([query_text]).astype("float32")
+            top_k=min(3,distill_index.ntotal)
+            D,I=distill_index.search(query_emb,top_k)
             docs.extend([distill_docs[i] for i in I[0]])
         return docs
 
-    tools = [
-        Tool(
-            name="Text Search",
-            func=lambda q: text_search_tool(q)[0],
-            description="Search text documents for relevant information."
-        ),
-        Tool(
-            name="Image Search",
-            func=image_search_tool,
-            description="Search images for relevant visual information."
-        ),
-        Tool(
-            name="Distillation Search",
-            func=distillation_search_tool,
-            description="Search distilled conversation history for relevant context."
-        )
+    tools=[
+        Tool(name="Text Search",func=lambda q:text_search_tool(q)[0],description="Search text documents for relevant information."),
+        Tool(name="Image Search",func=image_search_tool,description="Search images for relevant visual information."),
+        Tool(name="Distillation Search",func=distillation_search_tool,description="Search distilled conversation history for relevant context.")
     ]
-
-    agent = initialize_agent(
-        tools=tools,
-        llm=llm_agent,
-        agent_type="zero-shot-react-description",
-        verbose=False
-    )
-
-    docs, sources = text_search_tool(query)
-    images = image_search_tool(query) if use_images else []
-    distill_docs_local = distillation_search_tool(query)
-
-    context = ""
-    if docs:
-        context += "Text Documents:\n" + "\n".join([d.page_content for d in docs])
-    if images:
-        context += "\nRelevant Images:\n" + ", ".join([os.path.basename(p) for p in images])
-    if distill_docs_local:
-        context += "\nDistilled Conversation History:\n" + "\n".join([d.page_content for d in distill_docs_local])
-
-    prompt = f"""
+    agent=initialize_agent(tools=tools,llm=llm_agent,agent_type="zero-shot-react-description",verbose=False)
+    docs,sources=text_search_tool(query)
+    images=image_search_tool(query) if use_images else []
+    distill_docs_local=distillation_search_tool(query)
+    context=""
+    if docs: context+="Text Documents:\n"+"\n".join([d.page_content for d in docs])
+    if images: context+="\nRelevant Images:\n"+", ".join([os.path.basename(p) for p in images])
+    if distill_docs_local: context+="\nDistilled Conversation History:\n"+"\n".join([d.page_content for d in distill_docs_local])
+    prompt=f"""
     You are Agent TEASER, a Retrieval-Augmented Generation assistant.
     Use the provided context to answer the query concisely and accurately.
     If no relevant context is found, respond based on your knowledge.
@@ -414,117 +355,46 @@ def rag_chat_stream_agentic(query, use_images=True):
     Query: {query}
     Context: {context}
     """
-    
-    response = chat_model.generate_content(prompt, stream=True)
-    return response, images, sources
+    response=chat_model.generate_content(prompt,stream=True)
+    return response,images,sources
 
 # =========================
-# Streamlit UI: session state and helpers
+# Streamlit UI & session state
 # =========================
-if "uploaded_file_list" not in st.session_state:
-    st.session_state["uploaded_file_list"] = []
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "working_memory" not in st.session_state:
-    st.session_state.working_memory = []
-if "transactional_memory" not in st.session_state:
-    st.session_state.transactional_memory = []
-if "distillation_memory" not in st.session_state:
-    st.session_state.distillation_memory = []
-if "show_db_viewer" not in st.session_state:
-    st.session_state.show_db_viewer = False
-if "db_view_limit" not in st.session_state:
-    st.session_state.db_view_limit = 200
+if "uploaded_file_list" not in st.session_state: st.session_state["uploaded_file_list"]=[]
+if "messages" not in st.session_state: st.session_state.messages=[]
+if "working_memory" not in st.session_state: st.session_state.working_memory=[]
+if "transactional_memory" not in st.session_state: st.session_state.transactional_memory=[]
+if "distillation_memory" not in st.session_state: st.session_state.distillation_memory=[]
+if "show_db_viewer" not in st.session_state: st.session_state.show_db_viewer=False
+if "db_view_limit" not in st.session_state: st.session_state.db_view_limit=200
 
-def format_answer(answer: str) -> str:
-    answer = re.sub(r"(\d+)\.\s+", r"\n\1. ", answer)
-    answer = re.sub(r"[-•]\s+", r"\n- ", answer)
+def format_answer(answer:str)->str:
+    answer=re.sub(r"(\d+)\.\s+",r"\n\1. ",answer)
+    answer=re.sub(r"[-•]\s+",r"\n- ",answer)
     return answer.strip()
 
 # =========================
-# Streamlit layout + CSS + JS helpers
+# Streamlit layout setup
 # =========================
 st.set_page_config(page_title="TEASER Agent", layout="wide", page_icon="🤖")
 
-st.markdown("<h2 style='text-align:center;'> 🤖 Meet TEASER</h2>", unsafe_allow_html=True)
+# Load CSS and JS from static/ directory
+with open("static/styles.css", "r") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+html('<script src="static/script.js"></script>', height=0)
 
-# File uploader placed right after title
+# Load header from templates/ directory
+with open("templates/header.html", "r") as f:
+    st.markdown(f.read(), unsafe_allow_html=True)
+
+# File uploader (handled in Python to maintain functionality)
 uploaded_files = st.file_uploader(
     "Upload",
     type=["pdf", "png", "jpg", "jpeg", "xlsx", "xls", "csv"],
     accept_multiple_files=True,
     key="uploader_main"
 )
-
-st.markdown("""
-<style>
-.chat-container { max-width:900px; margin:auto; overflow-y:auto; max-height:50vh; min-height:20vh; padding-top:0; margin-top:0; padding-bottom:100px; background:transparent; }
-.chat-row { display:flex; align-items:flex-start; margin:6px 0; }
-.chat-avatar { font-size:28px; margin:6px; }
-.chat-bubble { padding:10px 15px; border-radius:18px; max-width:75%; word-wrap:break-word; font-size:15px; line-height:1.5; }
-.user-bubble { max-width:75%; margin-left:auto; text-align:right; background-color:#333; color:#fff; }
-.assistant-bubble { margin-right:auto; text-align:left; background-color:transparent; color:#fff; white-space:pre-wrap; }
-.timestamp { font-size:11px; color:#aaa; margin:2px 12px; }
-.user-row .timestamp { text-align:right; margin-left:auto; }
-.assistant-row .timestamp { text-align:left; margin-right:auto; }
-.sidebar .block-container { background:#0f1724; color:white; }
-.stFileUploader { max-width: 50% !important; margin:0 auto 20px auto; }
-.copy-btn { font-size:12px; color:#bbb; cursor:pointer; margin-top:4px; }
-.copy-btn:hover { color: #fff; text-decoration: underline; }
-.loading-dots span { animation: dots 1.4s infinite; display: inline-block; }
-.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes dots { 0%, 20% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
-#chat_scroll_target { height: 1px; }
-</style>
-""", unsafe_allow_html=True)
-
-# JS: scroll to bottom of chat container
-html("""
-<script>
-function scrollChatToBottom(){
-    try {
-        const containers = document.getElementsByClassName('chat-container');
-        if(containers && containers.length>0){
-            const container = containers[0];
-            container.scrollTop = container.scrollHeight;
-        }
-    } catch(e) { console.error(e); }
-}
-</script>
-""", height=0)
-
-# copy clipboard helper
-html("""
-<script>
-function copyToClipboard(elementId) {
-    try {
-        const element = document.getElementById(elementId);
-        if (!element) {
-            alert("Error: Could not find text to copy");
-            return;
-        }
-        const text = element.innerText;
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(text).then(
-                () => { alert("Copied to clipboard!"); },
-                (err) => { alert("Copy failed: " + err); }
-            );
-        } else {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            alert('Copied (fallback)');
-        }
-    } catch(err) {
-        alert("Error copying text: " + err);
-    }
-}
-</script>
-""", height=0)
 
 # =========================
 # Sidebar: Chats + New Chat + DB button + DB history list
