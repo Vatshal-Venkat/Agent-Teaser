@@ -1,0 +1,14 @@
+streamlit
+faiss-cpu
+numpy
+pandas
+torch
+transformers
+sentence-transformers
+Pillow
+PyPDF2
+rank-bm25
+langchain
+google-generativeai
+openpyxl
+protobuf
