@@ -7,23 +7,36 @@ It also features an interactive chat UI with history persistence, streaming resp
 🚀 Features
 
 ✅ Multi-modal RAG support (Text 📄 + Image 🖼️)
+
 ✅ FAISS vector search for retrieval
+
 ✅ Gemini 2.5 Pro model integration
+
 ✅ SQLite database for chat & file history
+
 ✅ Persistent chat memory (working + distillation memory)
+
 ✅ Smooth streaming (typing) responses
+
 ✅ Chat history sidebar with user timestamps
+
 ✅ File upload support for PDFs, Excel, CSV, and images
+
 ✅ Modern Streamlit chat interface
 
 
 🧩 Tech Stack
 
 Frontend: Streamlit
+
 Backend: Python (LangChain, Gemini API)
+
 Database: SQLite
+
 Vector Search: FAISS
+
 Embeddings: SentenceTransformer & CLIP
+
 Language Model: Google Gemini 2.5 Pro
 
 
