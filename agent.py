@@ -1,12 +1,3 @@
-# AGENT CHATBOT (with Database + FAISS + Gemini + Multi-modal RAG)
-# Full script with:
-# - SQLite DB for chats & documents
-# - Sidebar DB viewer showing all DB history
-# - "Database" button under New Chat
-# - Streaming / typing effect for assistant responses
-# - Chat stacking (new messages appended)
-# - All original FAISS / CLIP / embedding / Gemini logic preserved
-
 import os
 import tempfile
 import datetime
@@ -457,15 +448,25 @@ st.set_page_config(page_title="TEASER Agent", layout="wide", page_icon="🤖")
 
 st.markdown("<h2 style='text-align:center;'> 🤖 Meet TEASER</h2>", unsafe_allow_html=True)
 
+# File uploader placed right after title
+uploaded_files = st.file_uploader(
+    "Upload",
+    type=["pdf", "png", "jpg", "jpeg", "xlsx", "xls", "csv"],
+    accept_multiple_files=True,
+    key="uploader_main"
+)
+
 st.markdown("""
 <style>
-.chat-container { max-width:900px; margin:auto; overflow-y:auto; max-height:70vh; padding-bottom:100px; background:transparent; }
+.chat-container { max-width:900px; margin:auto; overflow-y:auto; max-height:50vh; min-height:20vh; padding-top:0; margin-top:0; padding-bottom:100px; background:transparent; }
 .chat-row { display:flex; align-items:flex-start; margin:6px 0; }
 .chat-avatar { font-size:28px; margin:6px; }
 .chat-bubble { padding:10px 15px; border-radius:18px; max-width:75%; word-wrap:break-word; font-size:15px; line-height:1.5; }
 .user-bubble { max-width:75%; margin-left:auto; text-align:right; background-color:#333; color:#fff; }
-.assistant-bubble { margin-right:auto; text-align:left; background-color:#1f2937; color:#fff; white-space:pre-wrap; }
-.timestamp { font-size:11px; color:#aaa; margin:2px 12px; text-align:right; }
+.assistant-bubble { margin-right:auto; text-align:left; background-color:transparent; color:#fff; white-space:pre-wrap; }
+.timestamp { font-size:11px; color:#aaa; margin:2px 12px; }
+.user-row .timestamp { text-align:right; margin-left:auto; }
+.assistant-row .timestamp { text-align:left; margin-right:auto; }
 .sidebar .block-container { background:#0f1724; color:white; }
 .stFileUploader { max-width: 50% !important; margin:0 auto 20px auto; }
 .copy-btn { font-size:12px; color:#bbb; cursor:pointer; margin-top:4px; }
@@ -591,7 +592,7 @@ for i, msg in enumerate(st.session_state.messages):
     if msg["role"] == "user":
         safe_text = escape(msg['content'])
         st.markdown(f"""
-        <div class='chat-row' style='justify-content:flex-end;'>
+        <div class='chat-row user-row' style='justify-content:flex-end;'>
           <div>
             <div class='chat-bubble user-bubble'>{safe_text}</div>
             <div class='timestamp'>{ts}</div>
@@ -605,7 +606,7 @@ for i, msg in enumerate(st.session_state.messages):
         # render final assistant content immediately if already present
         safe_answer = escape(msg['content'])
         st.markdown(f"""
-        <div class='chat-row' style='justify-content:flex-start;'>
+        <div class='chat-row assistant-row' style='justify-content:flex-start;'>
           <div class='chat-avatar'>🤖</div>
           <div>
             <div id='{msg_id}' class='chat-bubble assistant-bubble'>{safe_answer}</div>
@@ -628,16 +629,6 @@ st.markdown("<div id='chat_scroll_target'></div>", unsafe_allow_html=True)
 # Force client scroll to bottom after rendering current messages
 st.experimental_rerun_trigger = None
 st.markdown("<script>setTimeout(scrollChatToBottom,50);</script>", unsafe_allow_html=True)
-
-# =========================
-# File uploader (preserved)
-# =========================
-uploaded_files = st.file_uploader(
-    "Upload",
-    type=["pdf", "png", "jpg", "jpeg", "xlsx", "xls", "csv"],
-    accept_multiple_files=True,
-    key="uploader_main"
-)
 
 if uploaded_files:
     new_text_docs = []
@@ -725,7 +716,7 @@ if user_query:
 
     # Render the user bubble (append below previous messages)
     st.markdown(f"""
-    <div class='chat-row' style='justify-content:flex-end;'>
+    <div class='chat-row user-row' style='justify-content:flex-end;'>
       <div>
         <div class='chat-bubble user-bubble'>{escape(user_query)}</div>
         <div class='timestamp'>{current_time}</div>
@@ -768,7 +759,7 @@ if user_query:
         # render assistant final
         msg_id = f"assistant_{len(st.session_state.messages)-1}"
         st.markdown(f"""
-        <div class='chat-row' style='justify-content:flex-start;'>
+        <div class='chat-row assistant-row' style='justify-content:flex-start;'>
           <div class='chat-avatar'>🤖</div>
           <div>
             <div id='{msg_id}' class='chat-bubble assistant-bubble'>{escape(formatted_answer)}</div>
@@ -787,7 +778,7 @@ if user_query:
         assistant_id = f"assistant_stream_{len(st.session_state.messages)}"
         # initialize placeholder with avatar + empty bubble
         assistant_placeholder.markdown(f"""
-            <div class='chat-row' style='justify-content:flex-start;'>
+            <div class='chat-row assistant-row' style='justify-content:flex-start;'>
               <div class='chat-avatar'>🤖</div>
               <div>
                 <div id='{assistant_id}' class='chat-bubble assistant-bubble'></div>
@@ -820,7 +811,7 @@ if user_query:
                 # small throttle to improve UX but not block too long
                 # update UI with escaped text to avoid HTML injection
                 assistant_placeholder.markdown(f"""
-                    <div class='chat-row' style='justify-content:flex-start;'>
+                    <div class='chat-row assistant-row' style='justify-content:flex-start;'>
                       <div class='chat-avatar'>🤖</div>
                       <div>
                         <div id='{assistant_id}' class='chat-bubble assistant-bubble'>{escape(collected_text)}</div>
@@ -842,10 +833,24 @@ if user_query:
             except Exception:
                 pass
 
-        # finalize
+        # finalize with source
         formatted_answer = format_answer(collected_text)
+        source_info = ""
+        if sources and sources[0]:
+            if hasattr(sources[0], "metadata"):
+                if "page" in sources[0].metadata:
+                    source_info = f"\nSource: {sources[0].metadata['source']}, Page: {sources[0].metadata['page']}"
+                elif "row" in sources[0].metadata:
+                    sheet = sources[0].metadata.get("sheet", "")
+                    row_info = f", Sheet: {sheet}" if sheet else ""
+                    source_info = f"\nSource: {sources[0].metadata['source']}, Row: {sources[0].metadata['row']}{row_info}"
+        elif images and images[0]:
+            desc_response = chat_model.generate_content(["Describe this image briefly:", Image.open(images[0])])
+            source_info = f"\nSource: {os.path.basename(images[0])}, Description: {desc_response.text}"
+        formatted_answer += source_info
+
         assistant_placeholder.markdown(f"""
-            <div class='chat-row' style='justify-content:flex-start;'>
+            <div class='chat-row assistant-row' style='justify-content:flex-start;'>
               <div class='chat-avatar'>🤖</div>
               <div>
                 <div id='{assistant_id}' class='chat-bubble assistant-bubble'>{escape(formatted_answer)}</div>
