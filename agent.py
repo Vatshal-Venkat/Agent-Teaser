@@ -442,89 +442,26 @@ def format_answer(answer: str) -> str:
     return answer.strip()
 
 # =========================
-# Streamlit layout + CSS + JS helpers
+# Streamlit layout setup
 # =========================
 st.set_page_config(page_title="TEASER Agent", layout="wide", page_icon="🤖")
 
-st.markdown("<h2 style='text-align:center;'> 🤖 Meet TEASER</h2>", unsafe_allow_html=True)
+# Load CSS and JS from static/ directory
+with open("static/styles.css", "r") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+html('<script src="static/script.js"></script>', height=0)
 
-# File uploader placed right after title
+# Load header from templates/ directory
+with open("templates/header.html", "r") as f:
+    st.markdown(f.read(), unsafe_allow_html=True)
+
+# File uploader (handled in Python to maintain functionality)
 uploaded_files = st.file_uploader(
     "Upload",
     type=["pdf", "png", "jpg", "jpeg", "xlsx", "xls", "csv"],
     accept_multiple_files=True,
     key="uploader_main"
 )
-
-st.markdown("""
-<style>
-.chat-container { max-width:900px; margin:auto; overflow-y:auto; max-height:50vh; min-height:20vh; padding-top:0; margin-top:0; padding-bottom:100px; background:transparent; }
-.chat-row { display:flex; align-items:flex-start; margin:6px 0; }
-.chat-avatar { font-size:28px; margin:6px; }
-.chat-bubble { padding:10px 15px; border-radius:18px; max-width:75%; word-wrap:break-word; font-size:15px; line-height:1.5; }
-.user-bubble { max-width:75%; margin-left:auto; text-align:right; background-color:#333; color:#fff; }
-.assistant-bubble { margin-right:auto; text-align:left; background-color:transparent; color:#fff; white-space:pre-wrap; }
-.timestamp { font-size:11px; color:#aaa; margin:2px 12px; }
-.user-row .timestamp { text-align:right; margin-left:auto; }
-.assistant-row .timestamp { text-align:left; margin-right:auto; }
-.sidebar .block-container { background:#0f1724; color:white; }
-.stFileUploader { max-width: 50% !important; margin:0 auto 20px auto; }
-.copy-btn { font-size:12px; color:#bbb; cursor:pointer; margin-top:4px; }
-.copy-btn:hover { color: #fff; text-decoration: underline; }
-.loading-dots span { animation: dots 1.4s infinite; display: inline-block; }
-.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes dots { 0%, 20% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
-#chat_scroll_target { height: 1px; }
-</style>
-""", unsafe_allow_html=True)
-
-# JS: scroll to bottom of chat container
-html("""
-<script>
-function scrollChatToBottom(){
-    try {
-        const containers = document.getElementsByClassName('chat-container');
-        if(containers && containers.length>0){
-            const container = containers[0];
-            container.scrollTop = container.scrollHeight;
-        }
-    } catch(e) { console.error(e); }
-}
-</script>
-""", height=0)
-
-# copy clipboard helper
-html("""
-<script>
-function copyToClipboard(elementId) {
-    try {
-        const element = document.getElementById(elementId);
-        if (!element) {
-            alert("Error: Could not find text to copy");
-            return;
-        }
-        const text = element.innerText;
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(text).then(
-                () => { alert("Copied to clipboard!"); },
-                (err) => { alert("Copy failed: " + err); }
-            );
-        } else {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            alert('Copied (fallback)');
-        }
-    } catch(err) {
-        alert("Error copying text: " + err);
-    }
-}
-</script>
-""", height=0)
 
 # =========================
 # Sidebar: Chats + New Chat + DB button + DB history list
