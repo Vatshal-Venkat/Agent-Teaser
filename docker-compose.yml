@@ -1,0 +1,15 @@
+version: '3.9'
+
+services:
+  teaser-agent:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./faiss_store:/app/faiss_store
+      - ./agent_chatbot.db:/app/agent_chatbot.db
+      - ./static:/app/static
+      - ./templates:/app/templates
+    environment:
+      - STREAMLIT_SERVER_ENABLECORS=false
+      - GEMINI_API_KEY=${GEMINI_API_KEY}  # Make sure to define GEMINI_API_KEY in your environment
