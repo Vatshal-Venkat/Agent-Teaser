@@ -1,0 +1,10 @@
+__pycache__/
+*.pkl
+*.db
+*.tmp
+.DS_Store
+.env
+venv/
+agent_env/
+faiss_store/
+.streamlit/
