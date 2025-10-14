@@ -81,13 +81,38 @@ def insert_document(filename, filetype):
     except Exception as e:
         print("DB insert_document error:", e)
 
-def get_recent_chats(limit=50):
+def get_recent_sessions(limit=20):
+    """Group chat sessions by date, showing one title per session."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, role, content, time FROM chats ORDER BY id DESC LIMIT ?", (limit,))
-    rows = c.fetchall()
+    c.execute("""
+        SELECT 
+            DATE(time) as chat_date,
+            MIN(id) as first_id,
+            MIN(content) as first_message
+        FROM chats
+        WHERE role='user'
+        GROUP BY DATE(time)
+        ORDER BY chat_date DESC
+        LIMIT ?
+    """, (limit,))
+    sessions = c.fetchall()
     conn.close()
-    return rows[::-1]
+    return sessions
+
+def get_chats_by_date(chat_date):
+    """Retrieve all chats for a specific date."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        SELECT role, content, time, sources, images
+        FROM chats
+        WHERE DATE(time) = ?
+        ORDER BY id ASC
+    """, (chat_date,))
+    chats = c.fetchall()
+    conn.close()
+    return chats
 
 def get_all_chats_df(limit=None):
     conn = sqlite3.connect(DB_PATH)
@@ -390,62 +415,49 @@ with open("templates/header.html", "r") as f:
 
 # File uploader (handled in Python to maintain functionality)
 uploaded_files = st.file_uploader(
-    "Upload",
+    "Upload your files",
     type=["pdf", "png", "jpg", "jpeg", "xlsx", "xls", "csv"],
     accept_multiple_files=True,
     key="uploader_main"
 )
 
 # =========================
-# Sidebar: Chats + New Chat + DB button + DB history list
+# Streamlit Sidebar - UPDATED HISTORY SECTION
 # =========================
 with st.sidebar:
     st.markdown("<h3 style='color: white;'>💬 Chats</h3>", unsafe_allow_html=True)
-    search_query = st.text_input("🔍 Search DB history", value="", placeholder="Search DB messages...", key="db_search")
-    if st.button("➕ New Chat"):
-        # clear in-memory session messages (but we keep DB)
-        st.session_state.messages = []
-        st.experimental_rerun()
+    search_query = st.text_input("🔍 Search chat history", value="", placeholder="Search titles...", key="db_search")
 
-    # Database viewer button (requirement 4)
+    if st.button("➕ New Chat"):
+        st.session_state.messages = []
+        st.rerun()
+
     if st.button("🗄️ Database"):
         st.session_state.show_db_viewer = not st.session_state.show_db_viewer
 
     st.markdown("<hr style='border:1px solid #333;'>", unsafe_allow_html=True)
+    st.markdown("**Recent Chat Sessions**")
 
-    # Display recent DB history (all chats from DB)
-    st.markdown("**Recent database history**")
-    db_rows = get_recent_chats(limit=200)  # returns (id, role, content, time)
-    # filter by search_query if provided
-    if search_query:
-        db_rows = [r for r in db_rows if search_query.lower() in (r[2] or "").lower() or search_query.lower() in (r[1] or "").lower()]
+    sessions = get_recent_sessions(limit=20)
+    filtered_sessions = [s for s in sessions if search_query.lower() in (s[2] or "").lower()]
 
-    # Show entries with compact buttons to load into session
-    for row in reversed(db_rows):  # newest first in sidebar
-        rid, role, content, ts = row
-        display_text = (content[:80] + "...") if len(content) > 80 else content
-        if role == "user":
-            label = f"👤 {ts} • {escape(display_text)}"
-        else:
-            label = f"🤖 {ts} • {escape(display_text)}"
-        # Each chat entry button appends that DB message into the current session view
-        if st.button(label, key=f"dbrow_{rid}"):
-            # load this DB row into session view (append)
-            st.session_state.messages.append({"role": role, "content": content, "time": ts})
-            # also scroll to bottom in the main area by triggering rerun and letting rendered JS scroll
-            st.experimental_rerun()
+    for chat_date, first_id, first_msg in filtered_sessions:
+        title = (first_msg[:40] + "...") if len(first_msg) > 40 else first_msg
+        label = f"📅 {chat_date} • {escape(title)}"
+        if st.button(label, key=f"session_{chat_date}"):
+            chats = get_chats_by_date(chat_date)
+            st.session_state.messages = [
+                {"role": r, "content": c, "time": t} for (r, c, t, s, i) in chats
+            ]
+            st.rerun()
 
     st.markdown("<hr style='border:1px solid #333;'>", unsafe_allow_html=True)
-
-    # DB viewer controls
     st.markdown("**DB Viewer**")
     st.session_state.db_view_limit = st.number_input("Rows to show", min_value=10, max_value=2000, value=200, step=10)
     if st.session_state.show_db_viewer:
         try:
             df = get_all_chats_df(limit=st.session_state.db_view_limit)
-            # show a compact table
             st.dataframe(df, use_container_width=True)
-            # allow export to CSV
             csv = df.to_csv(index=False)
             st.download_button("Download DB CSV", data=csv, file_name="agent_chat_history.csv")
         except Exception as e:
