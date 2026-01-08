@@ -23,7 +23,7 @@ from sentence_transformers import SentenceTransformer
 from html import escape
 from langchain_core.documents import Document
 from rank_bm25 import BM25Okapi
-from langchain.agents import Tool, initialize_agent
+from langchain_community.agents import Tool, initialize_agent
 from langchain.llms.base import LLM
 import google.generativeai as genai
 from typing import Optional, List, Any
