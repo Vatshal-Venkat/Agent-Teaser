@@ -21,7 +21,7 @@ from transformers import CLIPProcessor, CLIPModel
 import torch
 from sentence_transformers import SentenceTransformer
 from html import escape
-from langchain.docstore.document import Document
+from langchain.schema import Document
 from rank_bm25 import BM25Okapi
 from langchain.agents import Tool, initialize_agent
 from langchain.llms.base import LLM
