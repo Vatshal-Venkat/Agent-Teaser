@@ -15,3 +15,17 @@ protobuf
 xlrd            
 python-multipart 
 requests        
+streamlit
+langchain
+langchain-community
+langchain-core
+sentence-transformers
+faiss-cpu
+transformers
+torch
+pandas
+numpy
+Pillow
+PyPDF2
+rank-bm25
+google-generativeai
